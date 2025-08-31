@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube to MP3 Converter</title>
+    <!-- Use Tailwind CSS for modern, responsive styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen bg-gray-100 p-4">
+
+    <!-- Main Container -->
+    <div class="w-full max-w-xl bg-white p-8 rounded-2xl shadow-xl border border-gray-200">
+        <div class="flex flex-col items-center">
+            <!-- Header -->
+            <h1 class="text-4xl sm:text-5xl font-extrabold text-center text-gray-800 mb-2">
+                Fast MP3 Converter
+            </h1>
+            <p class="text-lg text-gray-500 text-center mb-8">
+                Convert your favorite YouTube videos to high-quality MP3 audio.
+            </p>
+
+            <!-- Input and Button Section -->
+            <div class="w-full flex flex-col md:flex-row items-center space-y-4 md:space-y-0 md:space-x-4 mb-6">
+                <input
+                    id="urlInput"
+                    type="url"
+                    placeholder="Paste YouTube URL here..."
+                    class="flex-1 w-full p-4 text-lg border-2 border-gray-300 rounded-xl focus:outline-none focus:border-blue-500 transition duration-300"
+                />
+                <button
+                    id="downloadButton"
+                    class="w-full md:w-auto px-8 py-4 text-lg font-semibold text-white bg-blue-600 rounded-xl shadow-md hover:bg-blue-700 transition duration-300 transform hover:scale-105 active:scale-95 disabled:bg-blue-400 disabled:cursor-not-allowed"
+                >
+                    Download MP3
+                </button>
+            </div>
+
+            <!-- Status and Progress Area -->
+            <div id="statusArea" class="w-full min-h-[5rem] p-4 text-center rounded-xl bg-gray-50 text-gray-600 border border-gray-200 flex items-center justify-center">
+                <span id="statusText" class="text-sm sm:text-base">Enter a valid YouTube URL and click "Download".</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // DOM elements
+        const urlInput = document.getElementById('urlInput');
+        const downloadButton = document.getElementById('downloadButton');
+        const statusArea = document.getElementById('statusArea');
+        const statusText = document.getElementById('statusText');
+
+        // Event listener for the download button
+        downloadButton.addEventListener('click', async () => {
+            const url = urlInput.value.trim();
+
+            if (!url) {
+                showStatus('Please enter a valid YouTube URL.', 'text-red-500');
+                return;
+            }
+
+            // Simple URL validation (can be more robust)
+            if (!url.includes('youtube.com') && !url.includes('youtu.be')) {
+                showStatus('The URL must be from YouTube.', 'text-red-500');
+                return;
+            }
+
+            // Disable button and show loading state
+            downloadButton.disabled = true;
+            showStatus('Preparing your download, please wait...', 'text-blue-500');
+            statusArea.innerHTML = `
+                <div class="flex flex-col items-center">
+                    <svg class="animate-spin h-8 w-8 text-blue-500 mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span class="text-sm sm:text-base">Processing, this may take a moment...</span>
+                </div>
+            `;
+
+            try {
+                // Fetch the file from the Python backend
+                const response = await fetch('http://127.0.0.1:5000/download_mp3', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: url })
+                });
+
+                if (response.ok) {
+                    // Create a blob from the response to handle the file data
+                    const blob = await response.blob();
+                    const contentDisposition = response.headers.get('Content-Disposition');
+                    
+                    // Extract the filename from the Content-Disposition header
+                    let filename = 'audio.mp3';
+                    if (contentDisposition && contentDisposition.includes('filename=')) {
+                        filename = contentDisposition.split('filename=')[1].trim().replace(/"/g, '');
+                    }
+
+                    // Create a download link and trigger the download
+                    const a = document.createElement('a');
+                    const fileUrl = window.URL.createObjectURL(blob);
+                    a.href = fileUrl;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    window.URL.revokeObjectURL(fileUrl);
+
+                    showStatus('Download successful! Check your downloads folder.', 'text-green-500');
+
+                } else {
+                    const errorData = await response.json();
+                    showStatus(`Error: ${errorData.error}`, 'text-red-500');
+                }
+            } catch (error) {
+                console.error('Download failed:', error);
+                showStatus('Could not connect to the server. Please ensure the Python server is running.', 'text-red-500');
+            } finally {
+                downloadButton.disabled = false;
+            }
+        });
+
+        // Helper function to update the status message
+        function showStatus(message, colorClass) {
+            statusText.innerText = message;
+            statusArea.innerHTML = `<span id="statusText" class="text-sm sm:text-base ${colorClass}">${message}</span>`;
+        }
+    </script>
+</body>
+</html>
